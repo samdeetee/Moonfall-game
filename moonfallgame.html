@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moonfall POI System</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+canvas { display:block; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// ===== PLAYER =====
+let player = JSON.parse(localStorage.getItem("moonfallSave")) || {
+  x:0,y:0,hp:100,xp:0,level:1,skillPoints:0,money:0,
+  stats:{STR:1,SPD:1,LCK:1,INT:1,END:1,PER:1}
+};
+
+// ===== CAMERA =====
+let cam = {x:0,y:0};
+
+// ===== INPUT =====
+let touchLeft=null;
+canvas.addEventListener("touchstart", e=>{
+  for(let t of e.touches){
+    if(t.clientX < canvas.width/2) touchLeft = t;
+  }
+});
+canvas.addEventListener("touchmove", e=>{
+  for(let t of e.touches){
+    if(t.clientX < canvas.width/2) touchLeft = t;
+  }
+});
+canvas.addEventListener("touchend", ()=>touchLeft=null);
+
+// ===== WORLD =====
+let enemies=[];
+
+// ===== POI GENERATION =====
+function getPOI(wx, wy){
+  let seed = (wx*92837111) ^ (wy*689287499);
+  let r = Math.abs(seed % 100);
+
+  if(r < 3) return "dome";
+  if(r < 6) return "nest";
+  if(r < 10) return "loot";
+  return null;
+}
+
+// ===== SPAWN =====
+function spawnEnemy(){
+  enemies.push({
+    x: player.x + (Math.random()*800-400),
+    y: player.y + (Math.random()*800-400),
+    hp:30
+  });
+}
+setInterval(spawnEnemy,2000);
+
+// ===== UPDATE =====
+function update(){
+
+  // movement
+  if(touchLeft){
+    let dx = touchLeft.clientX - canvas.width/4;
+    let dy = touchLeft.clientY - canvas.height/2;
+    player.x += dx*0.02*player.stats.SPD;
+    player.y += dy*0.02*player.stats.SPD;
+  }
+
+  // POI effects
+  let gridX = Math.floor(player.x / 300);
+  let gridY = Math.floor(player.y / 300);
+  let poi = getPOI(gridX, gridY);
+
+  if(poi === "dome"){
+    player.hp = Math.min(100, player.hp + 0.5);
+  }
+
+  if(poi === "nest"){
+    if(Math.random() < 0.05){
+      enemies.push({x:player.x+Math.random()*100,y:player.y+Math.random()*100,hp:30});
+    }
+  }
+
+  if(poi === "loot"){
+    if(Math.random() < 0.02){
+      player.money += 10 + player.stats.LCK*2;
+    }
+  }
+
+  // enemies
+  enemies.forEach(e=>{
+    let dx=player.x-e.x;
+    let dy=player.y-e.y;
+    e.x+=dx*0.01;
+    e.y+=dy*0.01;
+
+    if(Math.hypot(dx,dy)<20){
+      player.hp -= 0.2;
+    }
+  });
+
+  // camera
+  cam.x = player.x - canvas.width/2;
+  cam.y = player.y - canvas.height/2;
+
+  localStorage.setItem("moonfallSave", JSON.stringify(player));
+}
+
+// ===== DRAW =====
+function draw(){
+
+  ctx.fillStyle="black";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  let size = 300;
+
+  // draw POIs
+  for(let x=-canvas.width; x<canvas.width*2; x+=size){
+    for(let y=-canvas.height; y<canvas.height*2; y+=size){
+
+      let wx = Math.floor((x+cam.x)/size);
+      let wy = Math.floor((y+cam.y)/size);
+
+      let poi = getPOI(wx, wy);
+
+      if(poi){
+        let sx = x - cam.x%size;
+        let sy = y - cam.y%size;
+
+        if(poi==="dome") ctx.fillStyle="blue";
+        if(poi==="nest") ctx.fillStyle="purple";
+        if(poi==="loot") ctx.fillStyle="yellow";
+
+        ctx.fillRect(sx+50, sy+50, 40, 40);
+      }
+    }
+  }
+
+  // player
+  ctx.fillStyle="white";
+  ctx.beginPath();
+  ctx.arc(canvas.width/2, canvas.height/2, 10, 0, Math.PI*2);
+  ctx.fill();
+
+  // enemies
+  ctx.fillStyle="red";
+  enemies.forEach(e=>{
+    ctx.beginPath();
+    ctx.arc(e.x-cam.x,e.y-cam.y,10,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  // UI
+  ctx.fillStyle="white";
+  ctx.fillText("HP:"+Math.floor(player.hp),10,20);
+  ctx.fillText("X:"+Math.floor(player.x)+" Y:"+Math.floor(player.y),10,40);
+}
+
+// ===== LOOP =====
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
